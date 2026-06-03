@@ -13,6 +13,41 @@ voltada a **famílias**, **profissionais** e, futuramente, **prefeituras**.
 - **Autenticação** própria: login/senha (bcrypt) + sessão JWT em cookie httpOnly
 - Estrutura **multi-tenant ready** (modelo `Organization`)
 
+## Arquitetura futura: Frontend Vercel + Backend Render
+
+> **Status: planejamento — base preparada, nada movido ainda.**
+
+O projeto evoluirá de um app Next.js monolítico para uma arquitetura de
+**monorepo** com **Frontend (Vercel)** e **Backend (Render)** separados. Nesta
+etapa apenas a **estrutura de pastas** foi criada — o app atual continua 100%
+funcional em `src/`, sem mudanças em rotas, autenticação ou Prisma schema.
+
+```
+apps/
+  web/        # Frontend Next.js → Vercel (futuro destino de src/)
+  api/        # Backend HTTP → Render (futuro destino da lógica de servidor)
+packages/
+  database/   # Prisma schema + client
+  domain/     # Regras de negócio + contratos (zod)
+  auth/       # Senha (bcrypt) + sessão JWT (jose) + RBAC
+  ui/         # Design system (componentes + Tailwind)
+  config/     # tsconfig/eslint/env compartilhados
+infra/
+  render/     # Blueprint do backend (futuro)
+  vercel/     # Config do frontend (futuro)
+  docker/     # Compose/Dockerfiles
+```
+
+As pastas acima contêm `README.md` explicando seu objetivo, mas **nenhum código
+de produção foi movido** e o `package.json`/workspaces **não foi alterado**
+(habilitar workspaces agora poderia quebrar o build — fica para uma fase
+futura). Documentação completa:
+
+- [`docs/FRONTEND_BACKEND_SPLIT.md`](docs/FRONTEND_BACKEND_SPLIT.md) — plano e roadmap por fases
+- [`docs/API_ROADMAP.md`](docs/API_ROADMAP.md) — endpoints previstos do backend
+- [`docs/RENDER_DEPLOYMENT.md`](docs/RENDER_DEPLOYMENT.md) — deploy do backend
+- [`docs/VERCEL_DEPLOYMENT.md`](docs/VERCEL_DEPLOYMENT.md) — deploy do frontend
+
 ## Estrutura de pastas
 
 ```
