@@ -1,26 +1,72 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   Design System — Desenvolva TEA
+   Paleta voltada a saúde, educação e inclusão: tons calmos, alto contraste
+   acessível, cantos arredondados e respiro generoso.
+   ========================================================================== */
+
+@theme {
+  /* Marca / Saúde / Crescimento (teal) */
+  --color-brand-50: #eafaf5;
+  --color-brand-100: #c8f1e4;
+  --color-brand-200: #97e6cf;
+  --color-brand-300: #5fd6b6;
+  --color-brand-400: #34c7a0;
+  --color-brand-500: #1cab88;
+  --color-brand-600: #128a6e;
+  --color-brand-700: #126e59;
+  --color-brand-800: #135748;
+  --color-brand-900: #11473b;
+
+  /* Confiança (azul) */
+  --color-trust-50: #eef4ff;
+  --color-trust-100: #d9e6ff;
+  --color-trust-200: #bcd2ff;
+  --color-trust-300: #8eb4ff;
+  --color-trust-400: #5b8def;
+  --color-trust-500: #3a6fe0;
+  --color-trust-600: #2856c4;
+  --color-trust-700: #2245a0;
+  --color-trust-800: #213d83;
+  --color-trust-900: #1f376c;
+
+  /* Acolhimento (âmbar/coral) */
+  --color-warm-50: #fff7ed;
+  --color-warm-100: #ffedd5;
+  --color-warm-200: #fed7aa;
+  --color-warm-300: #fdba74;
+  --color-warm-400: #fb9b54;
+  --color-warm-500: #f97f3a;
+
+  /* Neutros (superfícies suaves) */
+  --color-surface: #ffffff;
+  --color-surface-muted: #f6f8fa;
+  --color-border: #e6ebf0;
+
+  /* Tipografia */
+  --font-sans: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
+
+  /* Raios */
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: var(--color-surface-muted);
+  --foreground: #16242f;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Foco visível e acessível em toda a aplicação */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-trust-500);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
 }

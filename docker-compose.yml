@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: desenvolva-tea-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tea
+      POSTGRES_PASSWORD: tea
+      POSTGRES_DB: desenvolva_tea
+    ports:
+      # Host 5433 para não conflitar com um PostgreSQL nativo na 5432.
+      - "5433:5432"
+    volumes:
+      - tea_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tea -d desenvolva_tea"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  tea_pgdata:
