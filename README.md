@@ -1,4 +1,20 @@
-# Desenvolva TEA
+<h1 align="center">🧩 Desenvolva TEA</h1>
+
+<p align="center"><strong>SaaS de apoio ao desenvolvimento de crianças com TEA</strong> — para <strong>famílias</strong>, <strong>profissionais</strong> e <strong>prefeituras</strong>.</p>
+
+<p align="center">
+  <a href="https://desenvolva-tea.vercel.app/"><img src="https://img.shields.io/badge/demo-ao%20vivo-2ea44f?style=for-the-badge&logo=vercel&logoColor=white" alt="Demo ao vivo" /></a>
+  <img src="https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white" />
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/Prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white" />
+  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" />
+  <img src="https://img.shields.io/badge/multi--tenant-6E56CF?style=for-the-badge" />
+</p>
+
+<p align="center">🔗 <strong>Ao vivo:</strong> https://desenvolva-tea.vercel.app/</p>
+
+---
+
 
 Plataforma web (SaaS) para acompanhamento do desenvolvimento de crianças com TEA,
 voltada a **famílias**, **profissionais** e, futuramente, **prefeituras**.
