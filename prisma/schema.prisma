@@ -1,0 +1,558 @@
+// Schema Prisma — Plataforma Desenvolva TEA
+// Modelagem preparada para multi-tenant (cada registro pertence a uma Organization).
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Perfis de acesso. PREFEITURA já previsto para uso futuro.
+enum Role {
+  ADMIN
+  FAMILIA
+  PROFISSIONAL
+  PREFEITURA
+}
+
+/// Tipo de conteúdo da biblioteca terapêutica.
+enum ContentType {
+  ARTICLE
+  VIDEO
+  ACTIVITY
+  GUIDE
+}
+
+/// Especialidade terapêutica de um conteúdo (agrupa os vídeos em /conteudos).
+enum ContentSpecialty {
+  FONOAUDIOLOGIA
+  NEUROLOGIA
+  NUTRICAO
+  PSICOLOGIA
+  TERAPIA_OCUPACIONAL
+}
+
+/// Status de uma criança dentro de uma trilha de aprendizagem.
+enum EnrollmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// Domínio de desenvolvimento avaliado no acompanhamento de evolução.
+enum DevelopmentDomain {
+  COMMUNICATION
+  SOCIAL
+  MOTOR
+  COGNITIVE
+  BEHAVIORAL
+  AUTONOMY
+}
+
+/// Status de uma sessão de terapia.
+enum SessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELED
+}
+
+/// Indicadores exibidos no painel da família (cards de métrica).
+enum MetricKey {
+  COMMUNICATION
+  SOCIAL_INTERACTION
+  SLEEP_QUALITY
+  CRISIS_FREQUENCY
+  COGNITIVE
+  DAILY_ROUTINE
+}
+
+/// Período do gráfico de histórico de evolução.
+enum EvolutionPeriod {
+  WEEK
+  MONTH
+  YEAR
+}
+
+/// Contexto de um registro de evolução.
+enum EvolutionCategory {
+  GENERAL
+  THERAPY
+  HOME
+  SCHOOL
+  ROUTINE
+}
+
+/// Tipo de relatório emitido (para métricas municipais).
+enum ReportKind {
+  CHILD
+  MUNICIPAL
+}
+
+/// Status do vínculo entre uma criança e uma prefeitura (precisa de aprovação do ADMIN).
+enum ChildLinkStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Grau de parentesco/relação do responsável com a criança.
+enum GuardianRelationship {
+  MOTHER
+  FATHER
+  GUARDIAN
+  OTHER
+}
+
+/// Status do vínculo responsável <-> criança.
+enum GuardianLinkStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// ---------------------------------------------------------------------------
+// Tenant (multi-tenant ready)
+// ---------------------------------------------------------------------------
+
+/// Unidade de isolamento de dados (família, clínica, prefeitura...).
+/// No MVP existe uma org "default", mas o modelo já permite separar tenants.
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  children        Child[]
+  tracks          LearningTrack[]
+  contents        Content[]
+  contentViews    ContentView[]
+  reportEmissions ReportEmission[]
+  municipalities  Municipality[]
+
+  @@map("organizations")
+}
+
+// ---------------------------------------------------------------------------
+// Usuários e autenticação
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(FAMILIA)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Prefeitura à qual o usuário pertence (preenchido p/ PREFEITURA). Nullable.
+  municipalityId String?
+  municipality   Municipality? @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+
+  // Vínculos família <-> criança (um responsável pode acompanhar várias crianças)
+  guardianOf       Child[]           @relation("ChildGuardians")
+  // Crianças em que este usuário atua como terapeuta
+  therapyChildren  Child[]           @relation("ChildTherapist")
+  // Registros de evolução lançados por este usuário (profissional/família)
+  progressNotes    ProgressEntry[]
+  evolutionRecords EvolutionRecord[]
+
+  // Novos vínculos formais (Fase 1 da reestruturação de acesso)
+  guardianLinks            ChildGuardianLink[]     @relation("GuardianLinkGuardian")
+  guardianLinksCreated     ChildGuardianLink[]     @relation("GuardianLinkCreatedBy")
+  municipalityLinksRequested ChildMunicipalityLink[] @relation("MunicipalityLinkRequestedBy")
+  municipalityLinksApproved  ChildMunicipalityLink[] @relation("MunicipalityLinkApprovedBy")
+  childrenAsMainResponsible  Child[]                 @relation("ChildMainResponsible")
+
+  @@index([organizationId])
+  @@index([municipalityId])
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Criança (entidade central do acompanhamento)
+// ---------------------------------------------------------------------------
+
+model Child {
+  id               String    @id @default(cuid())
+  name             String
+  birthDate        DateTime
+  diagnosisNote    String? // observação livre sobre o diagnóstico/nível de suporte
+  supportLevel     Int? // 1, 2 ou 3 (níveis de suporte do TEA), opcional
+  avatarColor      String    @default("#5B8DEF") // cor do avatar gerado
+  accompaniedSince DateTime? // início do acompanhamento ("há 2 anos")
+  planActive       Boolean   @default(true) // pill "Plano Ativo"
+  overallEvolution Int       @default(0) // % de evolução geral (0-100)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  therapistId String?
+  therapist   User?   @relation("ChildTherapist", fields: [therapistId], references: [id], onDelete: SetNull)
+
+  // Responsável principal (opcional). Nullable. Fase 1 da reestruturação de acesso.
+  mainResponsibleId String?
+  mainResponsible   User?   @relation("ChildMainResponsible", fields: [mainResponsibleId], references: [id], onDelete: SetNull)
+
+  guardians        User[]            @relation("ChildGuardians")
+  enrollments      TrackEnrollment[]
+  progress         ProgressEntry[]
+  sessions         TherapySession[]
+  achievements     Achievement[]
+  metrics          ChildMetric[]
+  evolutionPoints  EvolutionPoint[]
+  evolutionRecords EvolutionRecord[]
+  contentViews     ContentView[]
+  xpEvents         XpEvent[]
+
+  // Vínculos formais (Fase 1): prefeitura (com aprovação) e responsáveis.
+  municipalityLinks ChildMunicipalityLink[]
+  guardianLinks     ChildGuardianLink[]
+
+  @@index([organizationId])
+  @@index([therapistId])
+  @@index([mainResponsibleId])
+  @@map("children")
+}
+
+// ---------------------------------------------------------------------------
+// Trilhas de aprendizagem
+// ---------------------------------------------------------------------------
+
+model LearningTrack {
+  id          String            @id @default(cuid())
+  title       String
+  description String
+  domain      DevelopmentDomain
+  coverColor  String            @default("#34C7A0")
+  order       Int               @default(0)
+  published   Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  modules     TrackModule[]
+  enrollments TrackEnrollment[]
+
+  @@index([organizationId])
+  @@map("learning_tracks")
+}
+
+model TrackModule {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  trackId String
+  track   LearningTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([trackId])
+  @@map("track_modules")
+}
+
+/// Matrícula de uma criança em uma trilha + progresso percentual.
+model TrackEnrollment {
+  id        String           @id @default(cuid())
+  status    EnrollmentStatus @default(NOT_STARTED)
+  progress  Int              @default(0) // 0-100
+  startedAt DateTime?
+  updatedAt DateTime         @updatedAt
+
+  childId String
+  child   Child         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  trackId String
+  track   LearningTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, trackId])
+  @@index([childId])
+  @@index([trackId])
+  @@map("track_enrollments")
+}
+
+// ---------------------------------------------------------------------------
+// Biblioteca de conteúdos terapêuticos
+// ---------------------------------------------------------------------------
+
+model Content {
+  id        String      @id @default(cuid())
+  title     String
+  summary   String
+  body      String? // texto/markdown do conteúdo
+  type      ContentType @default(ARTICLE)
+  url       String? // link externo (vídeo, PDF...)
+  tags      String[]    @default([])
+  published Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Vídeos terapêuticos self-hosted (bucket S3/R2). Ver docs/VIDEO_PIPELINE.md.
+  specialty  ContentSpecialty? // especialidade que agrupa o vídeo
+  storageKey String? // chave do objeto no bucket
+  mimeType   String? // ex.: video/mp4
+  sizeBytes  Int? // tamanho do arquivo em bytes
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  views ContentView[]
+
+  @@index([organizationId])
+  @@index([organizationId, specialty])
+  @@map("contents")
+}
+
+// ---------------------------------------------------------------------------
+// Acompanhamento de evolução
+// ---------------------------------------------------------------------------
+
+/// Registro pontual de evolução de uma criança em um domínio do desenvolvimento.
+model ProgressEntry {
+  id         String            @id @default(cuid())
+  domain     DevelopmentDomain
+  score      Int // 0-10 (avaliação subjetiva do marco/habilidade)
+  note       String?
+  recordedAt DateTime          @default(now())
+
+  childId  String
+  child    Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@index([authorId])
+  @@map("progress_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Painel da família — sessões, conquistas, métricas, evolução e XP
+// ---------------------------------------------------------------------------
+
+/// Sessão de terapia (agendada/realizada). Alimenta "24 Sessões" e a próxima sessão.
+model TherapySession {
+  id          String        @id @default(cuid())
+  scheduledAt DateTime
+  status      SessionStatus @default(SCHEDULED)
+  notes       String?
+  createdAt   DateTime      @default(now())
+
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@map("therapy_sessions")
+}
+
+/// Conquista (gamificação). Alimenta "12 Conquistas".
+model Achievement {
+  id       String   @id @default(cuid())
+  title    String
+  icon     String? // emoji ou nome do ícone
+  earnedAt DateTime @default(now())
+
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@map("achievements")
+}
+
+/// Indicador atual de um domínio (cards de métrica do painel).
+model ChildMetric {
+  id        String    @id @default(cuid())
+  key       MetricKey
+  value     Int // 0-100
+  trend     Int       @default(0) // variação p.p. (pode ser negativa)
+  updatedAt DateTime  @updatedAt
+
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, key])
+  @@index([childId])
+  @@map("child_metrics")
+}
+
+/// Ponto do gráfico "Histórico de Evolução" por período (semana/mês/ano).
+model EvolutionPoint {
+  id     String          @id @default(cuid())
+  period EvolutionPeriod @default(WEEK)
+  order  Int
+  label  String
+  value  Int // 0-100
+
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId, period])
+  @@map("evolution_points")
+}
+
+/// Evento de XP. Somado na semana vira "68 XP esta semana".
+model XpEvent {
+  id        String   @id @default(cuid())
+  amount    Int
+  reason    String?
+  createdAt DateTime @default(now())
+
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@map("xp_events")
+}
+
+// ---------------------------------------------------------------------------
+// Registro de evolução (Sprint Evolução) — lançado pelo responsável/profissional
+// ---------------------------------------------------------------------------
+
+/// Um registro diário de evolução. As notas 1–5 alimentam as métricas do painel.
+model EvolutionRecord {
+  id            String            @id @default(cuid())
+  date          DateTime // dia ao qual o registro se refere
+  category      EvolutionCategory @default(GENERAL)
+  note          String? // observação livre
+  performance   Int // nível de desempenho (1-5)
+  mood          Int // humor da criança (1-5)
+  social        Int // interação social (1-5)
+  communication Int // comunicação (1-5)
+  sleep         Int // sono (1-5)
+  feeding       Int // alimentação (1-5)
+  createdAt     DateTime          @default(now())
+
+  childId  String
+  child    Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([childId, date])
+  @@index([authorId])
+  @@map("evolution_records")
+}
+
+// ---------------------------------------------------------------------------
+// Métricas municipais (Sprint Prefeitura) — consumo de conteúdo e emissão de relatórios
+// ---------------------------------------------------------------------------
+
+/// Acesso/consumo de um conteúdo da biblioteca (opcionalmente atribuído a uma criança).
+model ContentView {
+  id       String   @id @default(cuid())
+  viewedAt DateTime @default(now())
+
+  contentId      String
+  content        Content      @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  childId        String?
+  child          Child?       @relation(fields: [childId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, viewedAt])
+  @@index([contentId])
+  @@index([childId])
+  @@map("content_views")
+}
+
+/// Registro de emissão de relatório (gravado quando um PDF é gerado).
+model ReportEmission {
+  id        String     @id @default(cuid())
+  kind      ReportKind @default(CHILD)
+  emittedAt DateTime   @default(now())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, emittedAt])
+  @@map("report_emissions")
+}
+
+// ---------------------------------------------------------------------------
+// Reestruturação de acesso por entidades (Fase 1) — Prefeitura + vínculos
+// ---------------------------------------------------------------------------
+
+/// Uma prefeitura/cidade. Pertence ao tenant da plataforma (Organization).
+model Municipality {
+  id        String   @id @default(cuid())
+  name      String // ex.: "Prefeitura de Salvador"
+  city      String
+  state     String
+  cnpj      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  users     User[]
+  childLinks ChildMunicipalityLink[]
+
+  @@index([organizationId])
+  @@map("municipalities")
+}
+
+/// Vínculo criança <-> prefeitura, com fluxo de aprovação do ADMIN.
+/// A prefeitura só enxerga a criança quando status = APPROVED.
+model ChildMunicipalityLink {
+  id              String          @id @default(cuid())
+  status          ChildLinkStatus @default(PENDING)
+  requestedAt     DateTime        @default(now())
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  childId        String
+  child          Child        @relation(fields: [childId], references: [id], onDelete: Cascade)
+  municipalityId String
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  requestedByUserId String
+  requestedBy       User   @relation("MunicipalityLinkRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  approvedByUserId  String?
+  approvedBy        User?  @relation("MunicipalityLinkApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([municipalityId, status])
+  @@index([childId, status])
+  @@map("child_municipality_links")
+}
+
+/// Vínculo formal responsável (família) <-> criança.
+model ChildGuardianLink {
+  id           String               @id @default(cuid())
+  relationship GuardianRelationship @default(GUARDIAN)
+  status       GuardianLinkStatus   @default(ACTIVE)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  childId        String
+  child          Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  guardianUserId String
+  guardian       User   @relation("GuardianLinkGuardian", fields: [guardianUserId], references: [id], onDelete: Cascade)
+
+  createdByUserId String
+  createdBy       User   @relation("GuardianLinkCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, guardianUserId])
+  @@index([guardianUserId, status])
+  @@map("child_guardian_links")
+}
