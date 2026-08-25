@@ -13,6 +13,11 @@
 
 <p align="center">🔗 <strong>Ao vivo:</strong> https://desenvolva-tea.vercel.app/</p>
 
+
+<p align="center">
+  <a href="https://desenvolva-tea.vercel.app/"><img width="100%" src="docs/preview.gif" alt="Landing do Desenvolva TEA" /></a>
+</p>
+
 ---
 
 
